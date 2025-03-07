@@ -1,17 +1,6 @@
 import tkinter as tk
 import ttkbootstrap as ttk
 from PIL import Image, ImageTk
-import mysql.connector
-
-# MySQL kapcsolat beállítása
-db = mysql.connector.connect(
-    host="localhost",
-    user="root",  # Ha van jelszavad, írd be ide
-    password="",
-    database="mozijegy"
-)
-
-cursor = db.cursor()
 
 # Ablak létrehozása
 root = ttk.Window(themename="superhero")
@@ -22,34 +11,38 @@ root.geometry("500x400")
 info_label = ttk.Label(root, text="Jelenleg játszó filmeink!", font=("Arial", 12))
 info_label.pack(pady=10)
 
-# Jegyfoglalás funkció
-def book_ticket(movie_title):
-    """Jegyfoglalás adatbázisba mentése"""
-    terem_szam = 1  # Példa teremszám, ezt dinamikusan is be lehet állítani
-    szek_szam = 5   # Példa szék szám
-    keresztnev = entry_firstname.get()
-    vezeteknev = entry_lastname.get()
+def open_seat_selection(movie_title, keresztnev, vezeteknev, email):
+    seat_window = tk.Toplevel(root)
+    seat_window.title("Válassz ülőhelyet")
+    seat_window.geometry("400x400")
     
-    if keresztnev and vezeteknev:
-        try:
-            cursor.execute(
-                "INSERT INTO foglalások (Sorszam, Keresztnev, Vezeteknev, Terem_szam, Szekszam) VALUES (%s, %s, %s, %s, %s)",
-                (None, keresztnev, vezeteknev, terem_szam, szek_szam)
-            )
-            db.commit()
-            status_label.config(text="Foglalás sikeres!", bootstyle="success")
-        except mysql.connector.Error as err:
-            status_label.config(text=f"Hiba: {err}", bootstyle="danger")
-    else:
-        status_label.config(text="Töltsd ki az adatokat!", bootstyle="warning")
+    ttk.Label(seat_window, text=f"Válassz helyet a(z) {movie_title} filmhez!", font=("Arial", 12)).pack(pady=10)
+    
+    seat_frame = ttk.Frame(seat_window)
+    seat_frame.pack()
+    
+    rows, cols = 5, 6  # 5 sor, 6 oszlopos terem
+    seats = []
+    
+    def toggle_seat(row, col, button):
+        if button['bootstyle'] == "success":
+            button.config(bootstyle="secondary")  # Üres hely visszaállítás
+        else:
+            button.config(bootstyle="success")  # Hely foglalás
 
-# Jegyfoglalás ablak megnyitása
+    for r in range(rows):
+        row_seats = []
+        for c in range(cols):
+            btn = ttk.Button(seat_frame, text=f"{r+1}-{c+1}", width=5, bootstyle="secondary", 
+                             command=lambda r=r, c=c, b=btn: toggle_seat(r, c, b))
+            btn.grid(row=r, column=c, padx=5, pady=5)
+            row_seats.append(btn)
+        seats.append(row_seats)
+
 def open_booking_window(movie_title):
-    global entry_firstname, entry_lastname, status_label
-
     booking_window = tk.Toplevel(root)
     booking_window.title("Jegyfoglalás")
-    booking_window.geometry("300x250")
+    booking_window.geometry("300x300")
     
     ttk.Label(booking_window, text=f"Jegyfoglalás: {movie_title}", font=("Arial", 12)).pack(pady=10)
     
@@ -61,24 +54,36 @@ def open_booking_window(movie_title):
     entry_lastname = ttk.Entry(booking_window)
     entry_lastname.pack(pady=5)
     
+    ttk.Label(booking_window, text="Email cím:").pack()
+    entry_email = ttk.Entry(booking_window)
+    entry_email.pack(pady=5)
+    
     status_label = ttk.Label(booking_window, text="", font=("Arial", 10))
     status_label.pack(pady=5)
     
-    ttk.Button(booking_window, text="Foglalás", bootstyle="success", command=lambda: book_ticket(movie_title)).pack(pady=10)
+    def validate_and_open_seats():
+        keresztnev = entry_firstname.get()
+        vezeteknev = entry_lastname.get()
+        email = entry_email.get()
+        
+        if keresztnev and vezeteknev and email:
+            booking_window.destroy()
+            open_seat_selection(movie_title, keresztnev, vezeteknev, email)
+        else:
+            status_label.config(text="Töltsd ki az összes mezőt!", bootstyle="warning")
+    
+    ttk.Button(booking_window, text="Foglalás", bootstyle="success", command=validate_and_open_seats).pack(pady=10)
 
-# Gombokra kattintáskor megjelenő szöveg és jegyfoglaló gomb létrehozása
 def show_info(text):
     info_label.config(text=text)
     book_button.pack(pady=10)
     book_button.config(command=lambda: open_booking_window(text))
 
-# Képek betöltése és átméretezése
 def load_image(path, size=(160, 240)):
     img = Image.open(path)
     img = img.resize(size, Image.LANCZOS)
     return ImageTk.PhotoImage(img)
 
-# Képek listája és hozzájuk tartozó leírások
 image_data = [
     ("rocky_film.jpg", "Rocky - Egy legendás sportfilm"),
     ("badboys.png", "Bad Boys - Akció és humor egyben"),
@@ -88,7 +93,6 @@ image_data = [
     ("it.png", "Az - Stephen King horror remekműve")
 ]
 
-# Gombok létrehozása
 frame = ttk.Frame(root)
 frame.pack()
 
@@ -99,14 +103,11 @@ for i, (path, description) in enumerate(image_data):
     try:
         img = load_image(path)
         button = ttk.Button(frame, image=img, bootstyle="light", command=lambda desc=description: show_info(desc))
-        button.image = img  # Referencia megtartása
+        button.image = img
         button.grid(row=i // columns, column=i % columns, padx=10, pady=10)
         buttons.append(button)
     except Exception as e:
         print(f"Hiba a kép betöltésekor: {e}")
 
-# Jegyfoglalás gomb létrehozása (kezdetben elrejtve)
 book_button = ttk.Button(root, text="Foglalj jegyet", bootstyle="primary")
-
-# A fő ciklus indítása
 root.mainloop()
