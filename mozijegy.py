@@ -14,30 +14,38 @@ info_label.pack(pady=10)
 def open_seat_selection(movie_title, keresztnev, vezeteknev, email):
     seat_window = tk.Toplevel(root)
     seat_window.title("Válassz ülőhelyet")
-    seat_window.geometry("400x400")
+    seat_window.geometry("550x500")
     
     ttk.Label(seat_window, text=f"Válassz helyet a(z) {movie_title} filmhez!", font=("Arial", 12)).pack(pady=10)
     
     seat_frame = ttk.Frame(seat_window)
-    seat_frame.pack()
+    seat_frame.pack(padx=20, pady=10)
     
-    rows, cols = 5, 6  # 5 sor, 6 oszlopos terem
-    seats = []
+    FREE = "success"   # Zöld (szabad)
+    TAKEN = "secondary" # Szürke (fogalt)
+    SELECTED = "warning" # Narancs (kiválasztott)
     
-    def toggle_seat(row, col, button):
-        if button['bootstyle'] == "success":
-            button.config(bootstyle="secondary")  # Üres hely visszaállítás
-        else:
-            button.config(bootstyle="success")  # Hely foglalás
-
+    rows, cols = 9, 12
+    seat_buttons = []
+    
+    def toggle_seat(row, col):
+        button = seat_buttons[row][col]
+        if button['bootstyle'] == FREE:
+            button.config(bootstyle=SELECTED)  # Kiválasztás
+        elif button['bootstyle'] == SELECTED:
+            button.config(bootstyle=FREE)  # Visszaállítás
+    
     for r in range(rows):
-        row_seats = []
+        row_buttons = []
         for c in range(cols):
-            btn = ttk.Button(seat_frame, text=f"{r+1}-{c+1}", width=5, bootstyle="secondary", 
-                             command=lambda r=r, c=c, b=btn: toggle_seat(r, c, b))
-            btn.grid(row=r, column=c, padx=5, pady=5)
-            row_seats.append(btn)
-        seats.append(row_seats)
+            state = FREE if (r < 8 or c < 6) else TAKEN  # Az alsó sor egy része foglalt
+            btn = ttk.Button(seat_frame, text=f"{r+1}-{c+1}", width=4, bootstyle=state,
+                             command=lambda r=r, c=c: toggle_seat(r, c))
+            btn.grid(row=r, column=c, padx=2, pady=2)
+            row_buttons.append(btn)
+        seat_buttons.append(row_buttons)
+    
+    ttk.Button(seat_window, text="Foglalás megerősítése", bootstyle="primary").pack(pady=10)
 
 def open_booking_window(movie_title):
     booking_window = tk.Toplevel(root)
