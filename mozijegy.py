@@ -1,15 +1,62 @@
 import tkinter as tk
 import ttkbootstrap as ttk
 from PIL import Image, ImageTk
+from fpdf import FPDF
+import smtplib
+from email.message import EmailMessage
 
 # Ablak létrehozása
 root = ttk.Window(themename="superhero")
 root.title("Mozi Jegyfoglalás")
 root.geometry("500x400")
 
-# Információs címke
 info_label = ttk.Label(root, text="Jelenleg játszó filmeink!", font=("Arial", 12))
 info_label.pack(pady=10)
+
+def generate_ticket(movie_title, keresztnev, vezeteknev, email):
+    """Létrehoz egy PDF mozijegyet."""
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    pdf.set_font("Arial", style='B', size=16)
+    pdf.cell(200, 10, "MoziJegy", ln=True, align="C")
+    pdf.image("logo.png", x=80, y=20, w=50)
+    pdf.ln(10)
+    
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, f"Film: {movie_title}", ln=True, align="L")
+    pdf.cell(200, 10, f"Név: {keresztnev} {vezeteknev}", ln=True, align="L")
+    pdf.cell(200, 10, f"Email: {email}", ln=True, align="L")
+    
+    # Mentés
+    pdf_filename = "mozi_jegy.pdf"
+    pdf.output(pdf_filename)
+    
+    # Küldés emailben
+    send_email(email, pdf_filename)
+
+def send_email(email, pdf_filename):
+    """Email küldése a felhasználónak a PDF jeggyel."""
+    msg = EmailMessage()
+    msg["Subject"] = "Mozi Jegy Foglalás"
+    msg["From"] = "11c-banko@ipari.vein.hu"
+    msg["To"] = email
+    msg.set_content("Kedves Néző! Csatoltan küldjük a mozijegyét.")
+
+    with open(pdf_filename, "rb") as f:
+        file_data = f.read()
+        msg.add_attachment(file_data, maintype="application", subtype="pdf", filename="mozi_jegy.pdf")
+
+    # SMTP kapcsolat (pl. Gmail SMTP szerver)
+    try:
+        smtp = smtplib.SMTP("smtp.gmail.com", 587)
+        smtp.starttls()
+        smtp.login("11c-banko@ipari.vein.hu", "jbmn kjdp fuer uibh") 
+        smtp.send_message(msg)
+        smtp.quit()
+    except Exception as e:
+        print("Hiba az email küldésekor:", e)
 
 def open_seat_selection(movie_title, keresztnev, vezeteknev, email):
     seat_window = tk.Toplevel(root)
@@ -21,31 +68,35 @@ def open_seat_selection(movie_title, keresztnev, vezeteknev, email):
     seat_frame = ttk.Frame(seat_window)
     seat_frame.pack(padx=20, pady=10)
     
-    FREE = "success"   # Zöld (szabad)
-    TAKEN = "secondary" # Szürke (fogalt)
-    SELECTED = "warning" # Narancs (kiválasztott)
+    FREE = "success"
+    TAKEN = "secondary"
+    SELECTED = "warning"
     
     rows, cols = 9, 12
     seat_buttons = []
-    
+
     def toggle_seat(row, col):
         button = seat_buttons[row][col]
         if button['bootstyle'] == FREE:
-            button.config(bootstyle=SELECTED)  # Kiválasztás
+            button.config(bootstyle=SELECTED)
         elif button['bootstyle'] == SELECTED:
-            button.config(bootstyle=FREE)  # Visszaállítás
-    
+            button.config(bootstyle=FREE)
+
     for r in range(rows):
         row_buttons = []
         for c in range(cols):
-            state = FREE if (r < 8 or c < 6) else TAKEN  # Az alsó sor egy része foglalt
+            state = FREE
             btn = ttk.Button(seat_frame, text=f"{r+1}-{c+1}", width=4, bootstyle=state,
                              command=lambda r=r, c=c: toggle_seat(r, c))
             btn.grid(row=r, column=c, padx=2, pady=2)
             row_buttons.append(btn)
         seat_buttons.append(row_buttons)
+
+    def confirm_booking():
+        generate_ticket(movie_title, keresztnev, vezeteknev, email)
+        seat_window.destroy()
     
-    ttk.Button(seat_window, text="Foglalás megerősítése", bootstyle="primary").pack(pady=10)
+    ttk.Button(seat_window, text="Foglalás megerősítése", bootstyle="primary", command=confirm_booking).pack(pady=10)
 
 def open_booking_window(movie_title):
     booking_window = tk.Toplevel(root)
