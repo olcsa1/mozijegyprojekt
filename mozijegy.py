@@ -4,40 +4,42 @@ from PIL import Image, ImageTk
 from fpdf import FPDF
 import smtplib
 from email.message import EmailMessage
+import sqlite3
+import uuid
+
+# Adatbázis összekapcsolása
+conn = sqlite3.connect("mozijegy.db")
+cursor = conn.cursor()
 
 # Ablak létrehozása
 root = ttk.Window(themename="superhero")
 root.title("Mozi Jegyfoglalás")
 root.geometry("500x400")
 
-info_label = ttk.Label(root, text="Jelenleg játszó filmeink!", font=("Arial", 12))
+info_label = ttk.Label(root, text="Jelenleg játszott filmeink!", font=("Arial", 12))
 info_label.pack(pady=10)
 
 def generate_ticket(movie_title, keresztnev, vezeteknev, email):
-    """Létrehoz egy PDF mozijegyet."""
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
 
     pdf.set_font("Arial", style='B', size=16)
     pdf.cell(200, 10, "MoziJegy", ln=True, align="C")
-    pdf.image("logo.png", x=80, y=20, w=50)
-    pdf.ln(10)
+    pdf.image("logo.jpg", x=80, y=20, w=50)
+    pdf.ln(30)
     
     pdf.set_font("Arial", size=12)
     pdf.cell(200, 10, f"Film: {movie_title}", ln=True, align="L")
     pdf.cell(200, 10, f"Név: {keresztnev} {vezeteknev}", ln=True, align="L")
     pdf.cell(200, 10, f"Email: {email}", ln=True, align="L")
     
-    # Mentés
     pdf_filename = "mozi_jegy.pdf"
     pdf.output(pdf_filename)
     
-    # Küldés emailben
     send_email(email, pdf_filename)
 
 def send_email(email, pdf_filename):
-    """Email küldése a felhasználónak a PDF jeggyel."""
     msg = EmailMessage()
     msg["Subject"] = "Mozi Jegy Foglalás"
     msg["From"] = "11c-banko@ipari.vein.hu"
@@ -48,11 +50,10 @@ def send_email(email, pdf_filename):
         file_data = f.read()
         msg.add_attachment(file_data, maintype="application", subtype="pdf", filename="mozi_jegy.pdf")
 
-    # SMTP kapcsolat (pl. Gmail SMTP szerver)
     try:
         smtp = smtplib.SMTP("smtp.gmail.com", 587)
         smtp.starttls()
-        smtp.login("11c-banko@ipari.vein.hu", "jbmn kjdp fuer uibh") 
+        smtp.login("11c-banko@ipari.vein.hu", "jbmn kjdp fuer uibh")
         smtp.send_message(msg)
         smtp.quit()
     except Exception as e:
@@ -61,41 +62,82 @@ def send_email(email, pdf_filename):
 def open_seat_selection(movie_title, keresztnev, vezeteknev, email):
     seat_window = tk.Toplevel(root)
     seat_window.title("Válassz ülőhelyet")
-    seat_window.geometry("550x500")
-    
+    seat_window.geometry("600x500")
+
     ttk.Label(seat_window, text=f"Válassz helyet a(z) {movie_title} filmhez!", font=("Arial", 12)).pack(pady=10)
-    
+
     seat_frame = ttk.Frame(seat_window)
     seat_frame.pack(padx=20, pady=10)
-    
+
     FREE = "success"
     TAKEN = "secondary"
     SELECTED = "warning"
-    
+
+    cursor.execute("SELECT Terem_szam, Terem_kapacitas FROM termek WHERE Film_cime = ?", (movie_title,))
+    result = cursor.fetchone()
+    if not result:
+        print("Nincs ilyen film az adatbázisban.")
+        seat_window.destroy()
+        return
+
+    terem_szam, kapacitas = result
     rows, cols = 9, 12
+
     seat_buttons = []
 
-    def toggle_seat(row, col):
-        button = seat_buttons[row][col]
-        if button['bootstyle'] == FREE:
-            button.config(bootstyle=SELECTED)
-        elif button['bootstyle'] == SELECTED:
-            button.config(bootstyle=FREE)
+    cursor.execute("SELECT Szekszam FROM foglalások WHERE Terem_szam = ?", (terem_szam,))
+    taken_seats = [row[0] for row in cursor.fetchall()]
+
+    def toggle_seat(r, c):
+        seat = seat_buttons[r][c]
+        if seat['selected']:
+            seat['button'].config(bootstyle=FREE)
+            seat['selected'] = False
+        else:
+            seat['button'].config(bootstyle=SELECTED)
+            seat['selected'] = True
 
     for r in range(rows):
         row_buttons = []
         for c in range(cols):
-            state = FREE
-            btn = ttk.Button(seat_frame, text=f"{r+1}-{c+1}", width=4, bootstyle=state,
-                             command=lambda r=r, c=c: toggle_seat(r, c))
+            szekszam = r * cols + c + 1
+            style = TAKEN if szekszam in taken_seats else FREE
+            btn = ttk.Button(seat_frame, text=f"{r+1}-{c+1}", width=4, bootstyle=style)
             btn.grid(row=r, column=c, padx=2, pady=2)
-            row_buttons.append(btn)
+
+            btn.config(command=lambda r=r, c=c: toggle_seat(r, c))
+
+            row_buttons.append({'button': btn, 'selected': False})
         seat_buttons.append(row_buttons)
 
     def confirm_booking():
-        generate_ticket(movie_title, keresztnev, vezeteknev, email)
-        seat_window.destroy()
-    
+        success = False
+
+        for r in range(rows):
+            for c in range(cols):
+                seat = seat_buttons[r][c]
+                if seat['selected']:
+                    szek_szam = r * cols + c + 1
+                    sorszam = str(uuid.uuid4())[:8] 
+
+                    try:
+                        cursor.execute("""
+                            INSERT INTO foglalások (Sorszam, Keresztnev, Vezeteknev, Terem_szam, Szekszam)
+                            VALUES (?, ?, ?, ?, ?)
+                        """, (sorszam, keresztnev, vezeteknev, terem_szam, szek_szam))
+                        conn.commit()
+                        success = True
+                    except sqlite3.IntegrityError as e:
+                        print(f"Hely {szek_szam} már foglalt, kihagyva.")
+                    except Exception as e:
+                        print("Foglalás hiba:", e)
+
+        if success:
+            generate_ticket(movie_title, keresztnev, vezeteknev, email)
+            seat_window.destroy()
+        else:
+            print("Nem történt foglalás.")
+
     ttk.Button(seat_window, text="Foglalás megerősítése", bootstyle="primary", command=confirm_booking).pack(pady=10)
 
 def open_booking_window(movie_title):
