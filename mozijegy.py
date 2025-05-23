@@ -21,7 +21,7 @@ info_label.pack(pady=10)
 
 def generate_ticket(movie_title, keresztnev, vezeteknev, email):
     try:
-        pdf = FPDF("L", "mm", (90, 50))  # Vízszintes, mozijegy méret
+        pdf = FPDF("L", "mm", (90, 100))  # Vízszintes, mozijegy méret
         pdf.add_page()
         pdf.set_auto_page_break(auto=False)
 
@@ -30,29 +30,30 @@ def generate_ticket(movie_title, keresztnev, vezeteknev, email):
         pdf.rect(2, 2, 86, 46)
 
         # Fejléc / cím
-        pdf.set_font("Arial", "B", 14)
+        pdf.set_font("Arial", "B", 10)
         pdf.set_text_color(30, 30, 30)
-        pdf.cell(0, 10, "🎬 MoziJegy", ln=True, align="C")
+        pdf.cell(0, 10, " MoziJegy", ln=True, align="C")
 
         # Vonal
         pdf.set_draw_color(100, 100, 100)
         pdf.line(5, 14, 85, 14)
 
         # Film és név adatok
-        pdf.set_font("Arial", "", 10)
+        pdf.set_font("Arial", "", 8)
         pdf.set_text_color(0, 0, 0)
         pdf.ln(2)
-        pdf.cell(0, 6, f"🎞️  Film: {movie_title}", ln=True)
-        pdf.cell(0, 6, f"👤 Név: {keresztnev} {vezeteknev}", ln=True)
-        pdf.cell(0, 6, f"📧 Email: {email}", ln=True)
+        pdf.multi_cell(0, 4, f"Film: {movie_title}", ln=True)
+
+        pdf.cell(0, 6, f" Név: {keresztnev} {vezeteknev}", ln=True)
+        pdf.cell(0, 6, f" Email: {email}", ln=True)
 
         # Jegy sorszáma
         jegy_id = str(uuid.uuid4())[:8]
-        pdf.cell(0, 6, f"🎟️  Jegyazonosító: {jegy_id}", ln=True)
+        pdf.cell(0, 6, f"  Jegyazonosító: {jegy_id}", ln=True)
 
         # Dátum, terem, szék - ide lehet fejleszteni, ha vannak ezek
-        pdf.cell(0, 6, "🕒 Dátum: 2025.05.23", ln=True)
-        pdf.cell(0, 6, "🪑 Terem: Automatikus", ln=True)
+        pdf.cell(0, 6, " Dátum: 2025.05.23", ln=True)
+        pdf.cell(0, 6, " Terem: Automatikus", ln=True)
 
         # Alsó szürke sáv (pl. vágás vagy vonalkód hely)
         pdf.set_fill_color(220, 220, 220)
