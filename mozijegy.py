@@ -20,24 +20,58 @@ info_label = ttk.Label(root, text="Jelenleg játszott filmeink!", font=("Arial",
 info_label.pack(pady=10)
 
 def generate_ticket(movie_title, keresztnev, vezeteknev, email):
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
+    try:
+        pdf = FPDF("L", "mm", (90, 50))  # Vízszintes, mozijegy méret
+        pdf.add_page()
+        pdf.set_auto_page_break(auto=False)
 
-    pdf.set_font("Arial", style='B', size=16)
-    pdf.cell(200, 10, "MoziJegy", ln=True, align="C")
-    pdf.image("logo.jpg", x=80, y=20, w=50)
-    pdf.ln(30)
-    
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, f"Film: {movie_title}", ln=True, align="L")
-    pdf.cell(200, 10, f"Név: {keresztnev} {vezeteknev}", ln=True, align="L")
-    pdf.cell(200, 10, f"Email: {email}", ln=True, align="L")
-    
-    pdf_filename = "mozi_jegy.pdf"
-    pdf.output(pdf_filename)
-    
-    send_email(email, pdf_filename)
+        # Keret
+        pdf.set_line_width(0.4)
+        pdf.rect(2, 2, 86, 46)
+
+        # Fejléc / cím
+        pdf.set_font("Arial", "B", 14)
+        pdf.set_text_color(30, 30, 30)
+        pdf.cell(0, 10, "🎬 MoziJegy", ln=True, align="C")
+
+        # Vonal
+        pdf.set_draw_color(100, 100, 100)
+        pdf.line(5, 14, 85, 14)
+
+        # Film és név adatok
+        pdf.set_font("Arial", "", 10)
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(2)
+        pdf.cell(0, 6, f"🎞️  Film: {movie_title}", ln=True)
+        pdf.cell(0, 6, f"👤 Név: {keresztnev} {vezeteknev}", ln=True)
+        pdf.cell(0, 6, f"📧 Email: {email}", ln=True)
+
+        # Jegy sorszáma
+        jegy_id = str(uuid.uuid4())[:8]
+        pdf.cell(0, 6, f"🎟️  Jegyazonosító: {jegy_id}", ln=True)
+
+        # Dátum, terem, szék - ide lehet fejleszteni, ha vannak ezek
+        pdf.cell(0, 6, "🕒 Dátum: 2025.05.23", ln=True)
+        pdf.cell(0, 6, "🪑 Terem: Automatikus", ln=True)
+
+        # Alsó szürke sáv (pl. vágás vagy vonalkód hely)
+        pdf.set_fill_color(220, 220, 220)
+        pdf.rect(2, 42, 86, 6, style="F")
+
+        # Logo opcionálisan
+        try:
+            pdf.image("logo.png", x=70, y=3, w=15)
+        except Exception as e:
+            print("Nem sikerült betölteni a logót:", e)
+
+        pdf_filename = "mozi_jegy.pdf"
+        pdf.output(pdf_filename)
+
+        send_email(email, pdf_filename)
+
+    except Exception as e:
+        print("Hiba a PDF generálása közben:", e)
+
 
 def send_email(email, pdf_filename):
     msg = EmailMessage()
