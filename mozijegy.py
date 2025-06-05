@@ -10,9 +10,50 @@ import sqlite3
 import uuid
 from tkinter import messagebox
 
+
+pdf = FPDF()
+pdf.add_page()
+pdf.set_font("Arial", size=12)
+pdf.cell(200, 10, txt="Teszt PDF", ln=True, align="C")
+pdf.output("teszt.pdf")
+
 # Adatbázis csatlakozás
-conn = sqlite3.connect("mozijegy.db")
+conn = sqlite3.connect("mozijegy2.db")
 cursor = conn.cursor()
+
+
+# Adatbázis inicializálás
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS termek (
+        Terem_szam INTEGER PRIMARY KEY,
+        Film_cime TEXT
+    )
+""")
+
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS foglalások (
+        Sorszam TEXT,
+        Keresztnev TEXT,
+        Vezeteknev TEXT,
+        Email TEXT,
+        Terem_szam INTEGER,
+        Szekszam INTEGER,
+        FOREIGN KEY (Terem_szam) REFERENCES termek(Terem_szam)
+    )
+""")
+
+# Tesztadatok beszúrása, ha üres a termek tábla
+cursor.execute("SELECT COUNT(*) FROM termek")
+if cursor.fetchone()[0] == 0:
+    cursor.executemany("INSERT INTO termek (Terem_szam, Film_cime) VALUES (?, ?)",
+                      [(1, "Rocky - Egy legendás sportfilm"),
+                       (2, "Bad Boys - Akció és humor egyben"),
+                       (3, "Üvegtigris - Magyar vígjáték klasszikus"),
+                       (4, "Kábító igazság - Valós történeten alapul"),
+                       (5, "Rush - Forma 1 és rivalizálás"),
+                       (6, "Az - Stephen King horror remekműve")])
+    conn.commit()
+
 
 # Jegyárak
 PRICES = {
@@ -31,13 +72,21 @@ info_label.pack(pady=10)
 
 # PDF generálás Cinema City stílusban
 def generate_ticket(movie_title, keresztnev, vezeteknev, email, seats, ticket_type, quantity, price_per_ticket):
-    from fpdf import FPDF
-    import uuid
-
     try:
+        import os
+        from fpdf import FPDF
+        
+        # Könyvtár létrehozása ha nem létezik
+        output_dir = "tickets"
+        os.makedirs(output_dir, exist_ok=True)
+        
         pdf = FPDF("P", "mm", (100, 140))
         pdf.add_page()
         pdf.set_auto_page_break(auto=False)
+
+        # Betűtípus hozzáadása (fontos ékezetes karakterekhez)
+        pdf.add_font('Arial', '', 'C:/Users/I7/Downloads/arial.zip', uni=True)
+        pdf.add_font('Arial', 'B', 'C:/Users/I7/Downloads/arial.zip', uni=True)
 
         # Keret
         pdf.set_line_width(0.4)
@@ -63,14 +112,16 @@ def generate_ticket(movie_title, keresztnev, vezeteknev, email, seats, ticket_ty
         pdf.ln(5)
         pdf.cell(0, 6, f"Jegyazonosító: {jegy_id}", ln=True, align="C")
 
-        pdf_filename = f"mozijegy_{jegy_id}.pdf"
+        pdf_filename = os.path.join(output_dir, f"mozijegy_{jegy_id}.pdf")
         pdf.output(pdf_filename)
-
-        send_email(email, pdf_filename)
+        
+        print(f"PDF sikeresen létrehozva: {pdf_filename}")
         return pdf_filename
 
     except Exception as e:
-        print("Hiba a PDF készítésnél:", e)
+        print(f"PDF generálási hiba: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return None
 
 # Email küldés
@@ -227,27 +278,50 @@ def open_seat_selection(movie_title, keresztnev, vezeteknev, email, ticket_type,
         seat_buttons.append(row)
 
     def confirm_booking():
-        if len(selected_seats) != quantity:
-            messagebox.showwarning("Hibás foglalás", f"{quantity} szék szükséges!")
-            return
+        try:
+            # Ellenőrizzük a kiválasztott helyek számát
+            if len(selected_seats) != quantity:
+                messagebox.showwarning("Hibás foglalás", f"Pontosan {quantity} széket kell kiválasztani! Jelenleg {len(selected_seats)} szék van kiválasztva.")
+                return
 
-        sorszam = str(uuid.uuid4())[:8]
-
-        for szek in selected_seats:
-            cursor.execute("""
-                INSERT INTO foglalások (Sorszam, Keresztnev, Vezeteknev, Email, Terem_szam, Szekszam)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (sorszam, keresztnev, vezeteknev, email, terem_szam, szek))
-        conn.commit()
-
-        pdf_file = generate_ticket(movie_title, keresztnev, vezeteknev, email, selected_seats, ticket_type, quantity, price_per_ticket)
-        if pdf_file:
-            messagebox.showinfo("Sikeres foglalás", "A jegy elkészült és emailben elküldtük.")
-        else:
-            messagebox.showerror(" Hiba", "Nem sikerült létrehozni a jegyet.")
-
+            # Ellenőrizzük, hogy a helyek szabadok-e
+            cursor.execute("SELECT Szekszam FROM foglalások WHERE Terem_szam = ? AND Szekszam IN ({0})".format(
+                ','.join(['?']*len(selected_seats))), [terem_szam] + selected_seats)
+            occupied_seats = [seat[0] for seat in cursor.fetchall()]
         
-        seat_window.destroy()
+            if occupied_seats:
+                messagebox.showerror("Hiba", f"A következő helyek már foglaltak: {occupied_seats}")
+                return
+
+            # Tranzakció kezdése
+            conn.isolation_level = 'EXCLUSIVE'
+            conn.execute('BEGIN EXCLUSIVE')
+        
+            sorszam = str(uuid.uuid4())[:8]
+        
+            # Foglalások rögzítése
+            for szek in selected_seats:
+                cursor.execute("""
+                    INSERT INTO foglalások (Sorszam, Keresztnev, Vezeteknev, Email, Terem_szam, Szekszam)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (sorszam, keresztnev, vezeteknev, email, terem_szam, szek))
+        
+            conn.commit()
+        
+            # PDF generálás
+            pdf_file = generate_ticket(movie_title, keresztnev, vezeteknev, email, selected_seats, ticket_type, quantity, price_per_ticket)
+        
+            if pdf_file:
+                messagebox.showinfo("Sikeres foglalás", f"Sikeres foglalás! Jegyeid elküldtük a(z) {email} címre.")
+                seat_window.destroy()
+            else:
+                messagebox.showerror("Hiba", "Nem sikerült létrehozni a jegyet. Kérjük, próbálja újra.")
+            
+        except sqlite3.Error as e:
+            conn.rollback()
+            messagebox.showerror("Adatbázis hiba", f"Hiba történt a foglalás során: {str(e)}")
+        except Exception as e:
+            messagebox.showerror("Hiba", f"Váratlan hiba történt: {str(e)}")
 
     
     ttk.Button(seat_window, text="Foglalás véglegesítése", command=confirm_booking, bootstyle="primary").pack(pady=10)
