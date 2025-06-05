@@ -8,6 +8,7 @@ import smtplib
 from email.message import EmailMessage
 import sqlite3
 import uuid
+import os
 from tkinter import messagebox
 
 
@@ -85,8 +86,8 @@ def generate_ticket(movie_title, keresztnev, vezeteknev, email, seats, ticket_ty
         pdf.set_auto_page_break(auto=False)
 
         # Betűtípus hozzáadása (fontos ékezetes karakterekhez)
-        pdf.add_font('Arial', '', 'C:/Users/I7/Downloads/arial.zip', uni=True)
-        pdf.add_font('Arial', 'B', 'C:/Users/I7/Downloads/arial.zip', uni=True)
+        pdf.add_font('Arial', '', 'ARIAL.TTF', uni=True)
+        pdf.add_font('Arial', 'B', 'ARIAL.TTF', uni=True)
 
         # Keret
         pdf.set_line_width(0.4)
@@ -94,7 +95,7 @@ def generate_ticket(movie_title, keresztnev, vezeteknev, email, seats, ticket_ty
 
         # Fejléc
         pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 10, "CINEMA CITY", ln=True, align="C")
+        pdf.cell(0, 10, "OLCSA MOZI", ln=True, align="C")
 
         pdf.set_font("Arial", "", 10)
         pdf.cell(0, 8, f"Előadás: {movie_title}", ln=True, align="C")
@@ -127,25 +128,34 @@ def generate_ticket(movie_title, keresztnev, vezeteknev, email, seats, ticket_ty
 # Email küldés
 
 def send_email(email, pdf_filename=None, subject="Mozi Jegy", msg_body="Köszönjük, hogy nálunk foglalt! Csatoltan a jegyed."):
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = "11c-banko@ipari.vein.hu"
-    msg["To"] = email
-    msg.set_content(msg_body)
-
     try:
-        if pdf_filename:
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = "11c-banko@ipari.vein.hu"
+        msg["To"] = email
+        msg.set_content(msg_body)
+
+        if pdf_filename and os.path.exists(pdf_filename):
             with open(pdf_filename, "rb") as f:
-                msg.add_attachment(f.read(), maintype="application", subtype="pdf", filename=pdf_filename)
+                file_data = f.read()
+                msg.add_attachment(
+                    file_data,
+                    maintype="application",
+                    subtype="pdf",
+                    filename=os.path.basename(pdf_filename))
+        else:
+            print("PDF fájl nem létezik vagy nincs megadva")  # Debug üzenet
 
-        smtp = smtplib.SMTP("smtp.gmail.com", 587)
-        smtp.starttls()
-        smtp.login("11c-banko@ipari.vein.hu", "jbmn kjdp fuer uibh")
-        smtp.send_message(msg)
-        smtp.quit()
-
+        with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
+            smtp.starttls()
+            smtp.login("11c-banko@ipari.vein.hu", "jbmn kjdp fuer uibh")
+            smtp.send_message(msg)
+            print("Email sikeresen elküldve")  # Debug üzenet
+            return True
+            
     except Exception as e:
-        print("Hiba az email küldésénél:", e)
+        print(f"Email küldési hiba: {str(e)}")  # Debug üzenet
+        return False
 # Foglalás törlés
 
 def torles_ablak():
@@ -312,10 +322,13 @@ def open_seat_selection(movie_title, keresztnev, vezeteknev, email, ticket_type,
             pdf_file = generate_ticket(movie_title, keresztnev, vezeteknev, email, selected_seats, ticket_type, quantity, price_per_ticket)
         
             if pdf_file:
+                print(f"PDF létrehozva: {pdf_file}")  # Debug üzenet
+                send_email(email, pdf_file, "Mozi jegyed", "Köszönjük a foglalást! Csatolva találod a jegyedet.")
                 messagebox.showinfo("Sikeres foglalás", f"Sikeres foglalás! Jegyeid elküldtük a(z) {email} címre.")
                 seat_window.destroy()
             else:
                 messagebox.showerror("Hiba", "Nem sikerült létrehozni a jegyet. Kérjük, próbálja újra.")
+                print("PDF generálás sikertelen")  # Debug üzenet
             
         except sqlite3.Error as e:
             conn.rollback()
